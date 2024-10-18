@@ -2,10 +2,12 @@ from ...imports import *
 from .block import Block
 from .embeddings import SinCosPositionalEmbedding
 from .masking_agent import MaskingAgent
+import logging
+
 
 
 class VitBackBone(nn.Module):
-    def __init__(self, embed_dim=768, depth=12,
+    def __init__(self,embed_dim=768, depth=12,
         num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
         norm_layer="LayerNorm", init_values=0.):
         super().__init__()
@@ -15,6 +17,8 @@ class VitBackBone(nn.Module):
             self.norm = self.norm_layer(embed_dim)
         else:
             raise NotImplementedError("Only LayerNorm is supported")
+        
+
 
         self.blocks = nn.ModuleList([
             Block(
@@ -76,11 +80,12 @@ class ViTBase(nn.Module):
         self.pos_embedding1 = SinCosPositionalEmbedding((num_patches, embed_dim), dropout_rate=dropout_rate)        
         self.pos_embedding2 = SinCosPositionalEmbedding((num_patches, embed_dim), dropout_rate=dropout_rate)
 
-        
-    
+
+
     def init_backbone(self, embed_dim=768, depth=12, num_heads=12,
                        mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0.,
                          attn_drop_rate=0., norm_layer="LayerNorm", init_values=0.):
+        
         self.backbone1 = VitBackBone(
             embed_dim=embed_dim, depth=depth, num_heads=num_heads, mlp_ratio=mlp_ratio,
             qkv_bias=qkv_bias, qk_scale=qk_scale, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate,
@@ -91,17 +96,20 @@ class ViTBase(nn.Module):
             qkv_bias=qkv_bias, qk_scale=qk_scale, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate,
             norm_layer=norm_layer, init_values=init_values
         )
-
+     
     def forward_features(self,x1,x2):
 
+
         t = [block(x2) for block in self.backbone2.blocks]
+  
+
 
          # Process x1 through backbone1, combining with t if index > 1
         for i, block1 in enumerate(self.backbone1.blocks):
             if i > 1:
             # Normalize and combine x1 with corresponding t
-                x2 =   t[i - 1] / t[i - 1].max()  # Normalize t[i-1] for stability
-                x1 = block1(x1,x2)
+                #x2 =   t[i - 1] / t[i - 1].max()  # Normalize t[i-1] for stability
+                x1 = block1(x1,t[i-1])
             else:
                 x1 = block1(x1)
 
