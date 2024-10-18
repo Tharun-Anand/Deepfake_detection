@@ -1,5 +1,5 @@
 from ...imports import *
-from .base1 import ViTBase
+from .base import ViTBase
 from .embeddings import PatchEmbedding3d
 
 
@@ -20,7 +20,6 @@ class ViTVideo(ViTBase):
                     patch_size=(tubelet_size, patch_size, patch_size),
                     embedding=embed_dim
                 )
-        #self.patch_embedding1.load_state_dict(torch.load('/home/sushanth/deepfake_detection/tharun/initialization_weights/patch_weights/video_encoder.patch_embedding1.pt'))
 
         
         self.patch_embedding2 = PatchEmbedding3d(
@@ -28,9 +27,6 @@ class ViTVideo(ViTBase):
                     patch_size=(tubelet_size, patch_size, patch_size),
                     embedding=embed_dim
                 )
-        #self.patch_embedding2.load_state_dict(torch.load('/home/sushanth/deepfake_detection/tharun/initialization_weights/patch_weights/video_encoder.patch_embedding2.pt'))
-        
-        # for param in self.patch_embedding2.parameters():
-        #     param.requires_grad = False
+
 
         self.num_patches = (img_size // patch_size) * (img_size // patch_size) * (n_frames // tubelet_size)
