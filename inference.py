@@ -204,7 +204,7 @@ class Model(nn.Module):
     
     def training_step(self, batch, batch_idx):
         videos, labels = batch['video'], batch['labels']
-        au_maps = process_image_batch(videos)
+        #au_maps = process_image_batch(videos)
 
         logits= self(videos)
         clf_loss = self.calculate_clf_loss(logits, labels)
@@ -217,7 +217,7 @@ class Model(nn.Module):
     
     def validation_step(self, batch, batch_idx):
         videos, labels = batch['video'], batch['labels']
-        au_maps = process_image_batch(videos)
+        #au_maps = process_image_batch(videos)
 
         with torch.no_grad():
             logits = self(videos)
