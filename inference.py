@@ -313,8 +313,8 @@ scaler = GradScaler()
 # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=1, eta_min=1e-5, verbose=True)
 
 best_val_loss = float('inf')
-if os.path.exists('test_gamma1.pth'):
-    model.load_state_dict(torch.load('test_gamma1.pth'))
+if os.path.exists('best_model.pth'):
+    model.load_state_dict(torch.load('best_model.pth'))
     print('Loaded best model')
 
 def accumulate_logs(logs, to_log, acc_steps):
