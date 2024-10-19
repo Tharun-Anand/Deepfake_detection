@@ -3,11 +3,11 @@ from main.models.vit.base import VitBackBone
 from main.models.vit.block import Block
 from main.models.vit.embeddings import SimplePatchify3D
 from main.models.vit.video import ViTVideo
-
+import json
 torch.autograd.set_detect_anomaly(True)
 #import matplotlib.pyplot as plt
 import copy
-
+import shutil
 import cv2
 import dlib
 import numpy as np
@@ -17,8 +17,6 @@ ddetector = dlib.get_frontal_face_detector()
 # dlib  library path
 dpredictor = dlib.shape_predictor('shape_predictor_68_face_landmarks.dat')
 
-
-
 import os
 import random
 from collections import defaultdict
@@ -26,20 +24,44 @@ from collections import defaultdict
 
 def get_paths():
 
-
-    videos=[]
+   ## For testing out on deepfake dataset
     
-    videos_path = os.path.join('path_to_videos')
+    fake=[]
+    videos_path = os.path.join('/mnt/data/tarun/FF++_subset/fake_videos')
     if os.path.exists(videos_path):
         for file_name in os.listdir(videos_path):
-                videos.append(os.path.join(videos_path, file_name))
+                fake.append(os.path.join(videos_path, file_name))
+
+    real=[]
+    videos_path = os.path.join('/mnt/data/tarun/FF++_subset/Real_Videos')
+    if os.path.exists(videos_path):
+        for file_name in os.listdir(videos_path):
+                real.append(os.path.join(videos_path, file_name))
 
   
-    test_paths = videos
-    test_labels =  [0]  * len(videos) ###   The labels of videos are 0 for real and 1 for fake
+    test_paths = fake + real
 
+    test_labels = [1]  * len(fake) + [0] * len(real)
+    
+    
+
+    ##Uncomment below lines and comment out the other lines for testing out locally_edited dataset
+    '''
+    fake=[]
+    videos_path = os.path.join('/mnt/data/tarun/FF++_subset/fake_videos')
+    if os.path.exists(videos_path):
+        for file_name in os.listdir(videos_path):
+                fake.append(os.path.join(videos_path, file_name))
+
+    test_paths = fake 
+
+    test_labels = [1]  * len(fake) 
+
+    '''
+ 
     
     return (test_paths, test_labels)
+
 
 
 
@@ -98,6 +120,7 @@ class MyDataset(Dataset):
         path, label = self.video_paths[idx], self.labels[idx]
         data = self.preprocessing_pipeline.process([path])
         data['labels'] = torch.tensor(label).to('cpu')
+        data['video_paths'] = path 
         logger.info(f"Loaded video {path} with label {label}")
 
         return data
@@ -110,7 +133,7 @@ class MyDataset(Dataset):
         return self_copy
     
 (test_paths, test_labels) = get_paths()
-processing_pipeline = ProcessingPipeLine(device='cuda')
+processing_pipeline = ProcessingPipeLine(device='cuda:0')
 import joblib
 
 
@@ -120,10 +143,12 @@ joblib.dump({
                 'dataset.joblib')
 
 def collate_fn(batch):
-    new_data = {'video': [], 'labels': []}
+    new_data = {'video': [], 'labels': [], 'video_paths': []}
     for data in batch:
         new_data['video'].append(data['video'])
         new_data['labels'].append(data['labels'])
+        new_data['video_paths'].append(data['video_paths'])  # Include video paths here
+
     new_data['video'] = torch.concatenate(new_data['video'],axis=0)
     new_data['labels'] = torch.stack(new_data['labels'])
     return new_data
@@ -145,10 +170,10 @@ import wandb
 from sklearn.metrics import f1_score
 
 # API key
-os.environ['WANDB_API_KEY'] = "Wandb API"
+os.environ['WANDB_API_KEY'] = "12aae348befa02f1d5999a57688c374586be1f55"
 # os.environ['WANDB_MODE'] = "disabled"
 # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-wandb.init(project='DEEPFAKE_testing')
+wandb.init(project='DEEPFAKE')
 
 
 
@@ -213,14 +238,17 @@ class Model(nn.Module):
         to_log = {'train_loss': loss, 'train_clf_loss': clf_loss}
         return loss, to_log
     
- 
+
     
     def validation_step(self, batch, batch_idx):
         videos, labels = batch['video'], batch['labels']
+        video_paths = batch['video_paths']
         #au_maps = process_image_batch(videos)
 
         with torch.no_grad():
             logits = self(videos)
+
+        
         
 
         clf_loss = self.calculate_clf_loss(logits, labels)
@@ -228,6 +256,7 @@ class Model(nn.Module):
         to_log = {'val_loss': loss, 'val_clf_loss': clf_loss}
 
         preds = torch.argmax(logits, dim=1)
+
         acc = torch.sum(preds == labels) / len(labels)
         f1 = f1_score(labels.cpu(), preds.cpu())
         to_log['val_acc'] = acc
@@ -275,7 +304,7 @@ epochs = 100
 mixed_precision = False
 # Setup
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = 'cuda'
+device = 'cuda:0'
 model.to(device)
 optimizer = model.configure_optimizers()
 scaler = GradScaler()
@@ -284,8 +313,8 @@ scaler = GradScaler()
 # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=1, eta_min=1e-5, verbose=True)
 
 best_val_loss = float('inf')
-if os.path.exists('weights.pth'):
-    model.load_state_dict(torch.load('weights.pth'))
+if os.path.exists('test_gamma1.pth'):
+    model.load_state_dict(torch.load('test_gamma1.pth'))
     print('Loaded best model')
 
 def accumulate_logs(logs, to_log, acc_steps):
@@ -327,7 +356,7 @@ for epoch in range(epochs):
             with tqdm(val_dataloader, desc='Validation', unit='batch', leave=False) as val_dataloader_tqdm:
                 for val_step, val_batch in enumerate(val_dataloader_tqdm):
                     # Move val_batch to device
-                    val_batch = {k: v.to(device) for k, v in val_batch.items()}
+                    val_batch = {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in val_batch.items()}
                     
                     with torch.no_grad():
                         val_loss, to_log_val = model.validation_step(val_batch, val_step)
@@ -353,4 +382,3 @@ for epoch in range(epochs):
             torch.cuda.empty_cache()
 
     
-    train_dataloader_tqdm.close()
